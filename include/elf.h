@@ -67,7 +67,7 @@ enum elf_types{
     ET_CORE
 };
 
-enum elf_indent{
+enum elf_ident{
     EI_MAG0,
     EI_MAG1,
     EI_MAG2,
@@ -80,11 +80,28 @@ enum elf_indent{
     EI_PAD
 };
 
+enum elf_dyn_types{
+    DT_NULL,
+    DT_NEEDED,
+    DT_PLTRELSZ, 
+    DT_PLTGOT, 
+    DT_HASH,
+    DT_STRTAB,
+    DT_SYMTAB,
+    DT_RELA, 
+    DT_RELASZ, 
+    DT_RELAENT, 
+    DT_STRSZ,
+    DT_SYMENT
+};
+
 typedef uint16_t Elf64_Half;    // 2 bytes, unsigned
 typedef uint32_t Elf64_Word;    // 4 bytes, unsigned
+typedef int32_t Elf64_Sword;
 typedef uint64_t Elf64_Addr;    // 8 bytes, unsigned (virtual address)
 typedef uint64_t Elf64_Off;     // 8 bytes, unsigned (file offset)
 typedef uint64_t Elf64_Xword;   // 8 bytes, unsigned (extended word)
+typedef int64_t Elf64_Sxword;
 
 typedef struct {
 	uint8_t		e_ident[EI_NINDENT];
@@ -152,6 +169,26 @@ typedef struct elf64sectionheader_s{
     Elf64_Xword  sh_addralign;
     Elf64_Xword  sh_entsize;
 }elf64sectionheader_s;
+
+
+typedef struct {
+	Elf64_Sxword	d_tag;
+   	union {
+   		Elf64_Xword	d_val;
+   		Elf64_Addr	d_ptr;
+	} d_un;
+} Elf64_Dyn;
+
+typedef struct {
+    Elf64_Addr r_offset;
+    Elf64_Xword r_info;
+    Elf64_Sxword r_addend;
+} Elf64_Rela;
+
+typedef struct {
+    Elf64_Addr r_offset;
+    Elf64_Xword r_info;
+} Elf64_Rel;
 
 
 #endif
