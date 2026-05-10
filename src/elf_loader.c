@@ -1,9 +1,8 @@
 #include "elf_loader.h"
 #include <string.h>
 
-
-elfsize_s* program_section_sizes(elf64programheader_s* prog_hdr_arr, uint16_t num_entries){
-    elfsize_s* binary_sizes = (elfsize_s*)malloc(sizeof(elfsize_s));
+loaderinfo_s* get_loader_info(elf64programheader_s* prog_hdr_arr, uint16_t num_entries){
+    loaderinfo_s* loaderinfo = (loaderinfo_s*)malloc(sizeof(loaderinfo_s));
     size_t total_size = 0;
     size_t max_size = 0;
     Elf64_Addr max_vaddr = 0;
@@ -19,13 +18,16 @@ elfsize_s* program_section_sizes(elf64programheader_s* prog_hdr_arr, uint16_t nu
                 min_vaddr = prog_hdr_arr[i].p_vaddr;
             }
         }
+        if(prog_hdr_arr[i].p_type == PT_DYNAMIC){
+            loaderinfo->dyn_ptr = prog_hdr_arr[i].p_offset;
+        }
     }
 
-    binary_sizes->max_vaddr = max_vaddr;
-    binary_sizes->min_vaddr = min_vaddr;
-    binary_sizes->total_size = page_align_up((max_vaddr - min_vaddr) + max_size, 0x1000);
+    loaderinfo->max_vaddr = max_vaddr;
+    loaderinfo->min_vaddr = min_vaddr;
+    loaderinfo->total_size = page_align_up((max_vaddr - min_vaddr) + max_size, 0x1000);
 
-    return binary_sizes;
+    return loaderinfo;
 }
 
 
@@ -42,7 +44,7 @@ void* mmap_target_process(size_t total_size){
 }
 
 
-void load_segment_to_memory(int fd, void* base_mem, elf64programheader_s prog_hdr, elfsize_s* binary_sizes){
+void load_segment_to_memory(int fd, void* base_mem, elf64programheader_s prog_hdr, loaderinfo_s* loaderinfo){
     off_t mem_offset = prog_hdr.p_offset;
     size_t bss_size = prog_hdr.p_memsz - prog_hdr.p_filesz;
     uintptr_t vaddr = (void *)(prog_hdr.p_vaddr);
@@ -52,24 +54,24 @@ void load_segment_to_memory(int fd, void* base_mem, elf64programheader_s prog_hd
     if(prog_hdr.p_flags & PF_W) prot |= PROT_WRITE;
     if(prog_hdr.p_flags & PF_X) prot |= PROT_EXEC;
 
-    size_t bytes_read = pread(fd, (char *)base_mem + (vaddr - binary_sizes->min_vaddr), prog_hdr.p_filesz, mem_offset);
+    size_t bytes_read = pread(fd, (char *)base_mem + (vaddr - loaderinfo->min_vaddr), prog_hdr.p_filesz, mem_offset);
 
     if(bss_size > 0){
-        memset(((char *)base_mem + (vaddr - binary_sizes->min_vaddr) + prog_hdr.p_filesz), 0, bss_size);
+        memset(((char *)base_mem + (vaddr - loaderinfo->min_vaddr) + prog_hdr.p_filesz), 0, bss_size);
     }
 
     if(bytes_read < 0){
         printf("Error while loading PT_LOAD segment");
     }
 
-    mprotect((char *)base_mem + (vaddr - binary_sizes->min_vaddr), (prog_hdr.p_filesz + bss_size), prot);
+    mprotect((char *)base_mem + (vaddr - loaderinfo->min_vaddr), (prog_hdr.p_filesz + bss_size), prot);
 }
 
 
-void load_ptload_segments(int fd, void* base_mem, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, elfsize_s* binary_sizes){
+void load_ptload_segments(int fd, void* base_mem, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, loaderinfo_s* loaderinfo){
     for(int i = 0; i < num_entries; i++){
         if(prog_hdr_arr[i].p_type == PT_LOAD){
-            load_segment_to_memory(fd, base_mem, prog_hdr_arr[i], binary_sizes);
+            load_segment_to_memory(fd, base_mem, prog_hdr_arr[i], loaderinfo);
         }
     }
 }
@@ -86,7 +88,7 @@ void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t 
         exit(1);
     }
     else if (child_pid == 0){
-        elfsize_s* binary_sizes = program_section_sizes(prog_hdr_arr, num_entries);
+        loaderinfo_s* binary_sizes = get_loader_info(prog_hdr_arr, num_entries);
         printf("Total size: %ld\n", binary_sizes->total_size);
 
         void* mmap_mem = mmap_target_process(binary_sizes->total_size);

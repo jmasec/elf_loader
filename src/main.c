@@ -3,13 +3,14 @@
 
 
 int main(){
-    int fd = open_elf_file("test_bss_data");
+    int fd = open_elf_file("test_reloc");
     if(fd < 0){
         return -1;
     }
     printf("Opened ELF\n");
 
     elf64header_s* elf_hdr = calloc(1, sizeof(elf64header_s));
+
 
     if(read_elf_header(fd, elf_hdr) != 0){
         perror("Failed to read in ELF header\n");
@@ -41,6 +42,8 @@ int main(){
         printf("Failed to read in section headers\n");
         return -1;
     }
+
+
 
     inject_target_process(fd, prog_hdr_arr, num_prog_entries, elf_hdr->e_entry);
 

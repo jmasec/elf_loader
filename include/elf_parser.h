@@ -11,6 +11,11 @@
 #include <stdbool.h>
 #include "elf.h"
 
+// TODO: Implement using the extern arrays in the program instead of defining them in main
+extern elf64programheader_s _PROGRAM[];
+extern elf64sectionheader_s _SECTION[];
+
+
 int open_elf_file(const char* elf_path);
 int read_elf_header(int fd, elf64header_s* elf_hdr);
 int read_section_headers(int fd, elf64sectionheader_s* section_hdr_arr, uint16_t num_entries, size_t section_hdr_offset, uint16_t sh_entsize);
