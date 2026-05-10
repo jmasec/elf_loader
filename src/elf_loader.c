@@ -76,6 +76,15 @@ void load_ptload_segments(int fd, void* base_mem, elf64programheader_s* prog_hdr
     }
 }
 
+void read_dyn_entries(Elf64_Off dyn_ptr){
+    // for now lets just read in the relavant ones we want, RELA, RELASZ, RELAENT
+    // define rela_array[relasz/relaent]
+}
+
+void fix_relocations(){
+
+}
+
 
 
 void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, uintptr_t entry_offset){
@@ -94,6 +103,9 @@ void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t 
         void* mmap_mem = mmap_target_process(binary_sizes->total_size);
 
         load_ptload_segments(fd, mmap_mem, prog_hdr_arr, num_entries, binary_sizes);
+
+        fix_relocations();
+
 
         void (*entry)(void);
 

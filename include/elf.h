@@ -56,7 +56,6 @@ ELF Header:
 #define ELFDATA2LSB         1
 #define EV_CURRENT          1
 
-
 #define EI_NINDENT 16
 
 enum elf_types{
