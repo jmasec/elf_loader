@@ -16,6 +16,10 @@ TODO
 2. fix up the relocation
 3. Look at how to fix up my dynamic resolutions
 
+NOTES
+- have the parser return mallocd structures of the elf that we read in if from a file descriptor, else it returns a ptr to where the start if that structure is in memory, -1 if fails. Then whoever needs it can call those parser functions and get usable structures back, so you can use the functions in a util or this loader for example. For now I will continue with a just having main call and alocate things for the parser to use.
+- added structs in elf.h to handle future elf files and in memory elfs
+
 gcc -fPIE -pie -nostdlib test_reloc.c -o test_reloc
 gcc -static -fPIE -pie -nostdlib test.c -o test
 set follow-fork-mode child

@@ -1,8 +1,8 @@
 #include "elf_loader.h"
 #include <string.h>
 
-loaderinfo_s* get_loader_info(elf64programheader_s* prog_hdr_arr, uint16_t num_entries){
-    loaderinfo_s* loaderinfo = (loaderinfo_s*)malloc(sizeof(loaderinfo_s));
+loaderctx_s* get_loader_info(elf64programheader_s* prog_hdr_arr, uint16_t num_entries){
+    loaderctx_s* loaderctx = (loaderctx_s*)calloc(1, sizeof(loaderctx_s));
     size_t total_size = 0;
     size_t max_size = 0;
     Elf64_Addr max_vaddr = 0;
@@ -19,15 +19,15 @@ loaderinfo_s* get_loader_info(elf64programheader_s* prog_hdr_arr, uint16_t num_e
             }
         }
         if(prog_hdr_arr[i].p_type == PT_DYNAMIC){
-            loaderinfo->dyn_ptr = prog_hdr_arr[i].p_offset;
+            loaderctx->dyn_offset = prog_hdr_arr[i].p_offset;
         }
     }
 
-    loaderinfo->max_vaddr = max_vaddr;
-    loaderinfo->min_vaddr = min_vaddr;
-    loaderinfo->total_size = page_align_up((max_vaddr - min_vaddr) + max_size, 0x1000);
+    loaderctx->max_vaddr = max_vaddr;
+    loaderctx->min_vaddr = min_vaddr;
+    loaderctx->load_size = page_align_up((max_vaddr - min_vaddr) + max_size, 0x1000);
 
-    return loaderinfo;
+    return loaderctx;
 }
 
 
@@ -44,7 +44,7 @@ void* mmap_target_process(size_t total_size){
 }
 
 
-void load_segment_to_memory(int fd, void* base_mem, elf64programheader_s prog_hdr, loaderinfo_s* loaderinfo){
+void load_segment_to_memory(int fd, void* base_mem, elf64programheader_s prog_hdr, loaderctx_s* loaderctx){
     off_t mem_offset = prog_hdr.p_offset;
     size_t bss_size = prog_hdr.p_memsz - prog_hdr.p_filesz;
     uintptr_t vaddr = (void *)(prog_hdr.p_vaddr);
@@ -54,37 +54,95 @@ void load_segment_to_memory(int fd, void* base_mem, elf64programheader_s prog_hd
     if(prog_hdr.p_flags & PF_W) prot |= PROT_WRITE;
     if(prog_hdr.p_flags & PF_X) prot |= PROT_EXEC;
 
-    size_t bytes_read = pread(fd, (char *)base_mem + (vaddr - loaderinfo->min_vaddr), prog_hdr.p_filesz, mem_offset);
+    size_t bytes_read = pread(fd, (char *)base_mem + (vaddr - loaderctx->min_vaddr), prog_hdr.p_filesz, mem_offset);
 
     if(bss_size > 0){
-        memset(((char *)base_mem + (vaddr - loaderinfo->min_vaddr) + prog_hdr.p_filesz), 0, bss_size);
+        memset(((char *)base_mem + (vaddr - loaderctx->min_vaddr) + prog_hdr.p_filesz), 0, bss_size);
     }
 
     if(bytes_read < 0){
         printf("Error while loading PT_LOAD segment");
     }
 
-    mprotect((char *)base_mem + (vaddr - loaderinfo->min_vaddr), (prog_hdr.p_filesz + bss_size), prot);
+    mprotect((char *)base_mem + (vaddr - loaderctx->min_vaddr), (prog_hdr.p_filesz + bss_size), prot);
 }
 
 
-void load_ptload_segments(int fd, void* base_mem, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, loaderinfo_s* loaderinfo){
+void load_ptload_segments(int fd, void* base_mem, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, loaderctx_s* loaderctx){
     for(int i = 0; i < num_entries; i++){
         if(prog_hdr_arr[i].p_type == PT_LOAD){
-            load_segment_to_memory(fd, base_mem, prog_hdr_arr[i], loaderinfo);
+            load_segment_to_memory(fd, base_mem, prog_hdr_arr[i], loaderctx);
         }
     }
 }
 
-void read_dyn_entries(Elf64_Off dyn_ptr){
+bool vaddr_to_offset(){
+    return true;
+}
+
+bool resolve_relocations( loaderctx_s* loaderctx,elf64programheader_s* prog_hdr_arr, void* base_mem){
+    // vaddr_to_offset doesnt do anything right now
+    if(!vaddr_to_offset(loaderctx->rela_offset, prog_hdr_arr)){
+        printf("Failed to Translate Virtual Mem to Offset");
+        return false;
+    }
+
+    loaderctx->total_relocations = loaderctx->relasz/loaderctx->relaent;
+    // might not need array, why do I need to store them? I could just handle them on the fly
+    rela_array[loaderctx->total_relocations];
+
+    for(size_t i = 0; i < loaderctx->total_relocations; i++){
+
+    }
+}
+
+
+bool dynamic_linker(){
+    return;
+}
+
+
+bool handle_dynamic_entries(int fd, loaderctx_s* loaderctx, void* base_mem, elf64programheader_s* prog_hdr_arr){
     // for now lets just read in the relavant ones we want, RELA, RELASZ, RELAENT
     // define rela_array[relasz/relaent]
+    while(1){
+        Elf64_Dyn* dyn = malloc(sizeof(Elf64_Dyn));
+        size_t bytes_read = pread(fd, dyn, sizeof(Elf64_Dyn), (off_t)loaderctx->dyn_offset);
+
+        switch (dyn->d_tag)
+        {
+        // end of array of dyns
+        case DT_NULL:
+            return;
+
+        case DT_RELA:
+            loaderctx->rela_offset = dyn->d_un.d_ptr;
+            break;
+
+        case DT_RELASZ:
+            loaderctx->relasz = dyn->d_un.d_val;   
+            break;
+
+        case DT_RELAENT:
+            loaderctx->relaent = dyn->d_un.d_val;
+            break;
+
+        default:
+            // might not even need to read in the dyns at all, just free the dyns after each look adn not store them in a data struct
+            break;
+        }
+
+        loaderctx->dyn_offset += sizeof(Elf64_Dyn);
+    }
+
+    if(!resolve_relocations(loaderctx, prog_hdr_arr, base_mem)){
+        return false;
+    }
+
+    if(!dynamic_linker()){
+        return false;
+    }
 }
-
-void fix_relocations(){
-
-}
-
 
 
 void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, uintptr_t entry_offset){
@@ -97,21 +155,24 @@ void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t 
         exit(1);
     }
     else if (child_pid == 0){
-        loaderinfo_s* binary_sizes = get_loader_info(prog_hdr_arr, num_entries);
-        printf("Total size: %ld\n", binary_sizes->total_size);
+        loaderctx_s* loaderctx = get_loader_info(prog_hdr_arr, num_entries);
+        printf("Total size: %ld\n", loaderctx->load_size);
 
-        void* mmap_mem = mmap_target_process(binary_sizes->total_size);
+        void* mmap_mem = mmap_target_process(loaderctx->load_size);
 
-        load_ptload_segments(fd, mmap_mem, prog_hdr_arr, num_entries, binary_sizes);
+        load_ptload_segments(fd, mmap_mem, prog_hdr_arr, num_entries, loaderctx);
 
-        fix_relocations();
+        if(!handle_dynamic_entries(fd, loaderctx, mmap_mem, prog_hdr_arr)){
+            printf("Dynamic/Relocations Failed\n");
+            return;
+        }
 
 
         void (*entry)(void);
 
-        entry = (void(*)(void))((char *)mmap_mem + (entry_offset - binary_sizes->min_vaddr));
+        entry = (void(*)(void))((char *)mmap_mem + (entry_offset - loaderctx->min_vaddr));
 
-        free(binary_sizes);
+        free(loaderctx);
 
         entry();
     }

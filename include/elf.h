@@ -191,5 +191,20 @@ typedef struct {
     Elf64_Xword r_info;
 } Elf64_Rel;
 
+// this is for future things, in memory vs from a file
+// right now I only support a file
+typedef enum elf_datatype_s{
+    ELF_FILE_DESCRIPTOR,
+    ELF_MEMORY_POINTER
+} elf_datatype_s;
+
+typedef struct elfdata_s{
+    elf_datatype_s type;
+    union {
+   		int	    e_fd;
+   		void*	e_ptr;
+	} edata;
+} elfdata_s;
+
 
 #endif
