@@ -9,10 +9,11 @@
 - [ ] handle relocations
 - [ ] handle dynamic resolutions
 - [ ] improve the software design, too many params, better struct organization of related data, etc
-- [ ] where to put the arrays of the structs at? In the headers or C files? 
+- [ ] where to put the arrays of the structs at? In the headers or C files? I may not need this actually
+- [ ] make the elf parser code a submodule, make all changes to it in that for that repo, the code is not owned by this one, I just need the functions
 
 TODO
-1. need to parse out dyn sections now into my dynamic arrays
+1. need to parse out dyn sections now into my dynamic arrays 
 2. fix up the relocation
 3. Look at how to fix up my dynamic resolutions
 

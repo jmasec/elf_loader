@@ -19,13 +19,13 @@ typedef struct loaderctx_s{
     Elf64_Off rela_offset;
     size_t relasz; 
     size_t relaent;
-    size_t total_relocations; 
+    size_t total_relocations;
+    elfdata_s* data; //ptr to either the blob or file
 } loaderctx_s;
 
 extern Elf64_Rela rela_array[];
 
 void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, uintptr_t entry_offset);
-
 
 
 #endif

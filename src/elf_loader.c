@@ -1,6 +1,14 @@
 #include "elf_loader.h"
 #include <string.h>
 
+
+int page_align_up(int addr, int boundary){
+    if(addr % boundary != 0){
+        return (addr + boundary - 1) &  ~(boundary - 1);
+    }
+    return addr;
+}
+
 loaderctx_s* get_loader_info(elf64programheader_s* prog_hdr_arr, uint16_t num_entries){
     loaderctx_s* loaderctx = (loaderctx_s*)calloc(1, sizeof(loaderctx_s));
     size_t total_size = 0;
@@ -26,16 +34,9 @@ loaderctx_s* get_loader_info(elf64programheader_s* prog_hdr_arr, uint16_t num_en
     loaderctx->max_vaddr = max_vaddr;
     loaderctx->min_vaddr = min_vaddr;
     loaderctx->load_size = page_align_up((max_vaddr - min_vaddr) + max_size, 0x1000);
+    // add a functio on the elf parser to return me a elfdata_s struct so the loader knows how to handle
 
     return loaderctx;
-}
-
-
-int page_align_up(int addr, int boundary){
-    if(addr % boundary != 0){
-        return (addr + boundary - 1) &  ~(boundary - 1);
-    }
-    return addr;
 }
 
 void* mmap_target_process(size_t total_size){
@@ -88,32 +89,56 @@ bool resolve_relocations( loaderctx_s* loaderctx,elf64programheader_s* prog_hdr_
     }
 
     loaderctx->total_relocations = loaderctx->relasz/loaderctx->relaent;
+
+
     // might not need array, why do I need to store them? I could just handle them on the fly
-    rela_array[loaderctx->total_relocations];
+    // rela_array[loaderctx->total_relocations];
+    Elf64_Rela* relocation_entry = (Elf64_Rela*)malloc(sizeof(Elf64_Rela));
 
-    for(size_t i = 0; i < loaderctx->total_relocations; i++){
+    // loop for the total size of relas, an increment size of a rela
+    for(size_t i = 0; i < loaderctx->relasz; i+=loaderctx->relaent){
+        if(loaderctx->data->type == ELF_FILE_DESCRIPTOR){
+            // pread the relocation entry into the rela struct
+            size_t bytes_read = pread(loaderctx->data->edata.e_fd, relocation_entry, loaderctx->relasz, loaderctx->rela_offset + i);
 
+            // then set *(base_mem + r_offset) = base_mem + r_addend;
+            uint64_t *where = (uint64_t *)((uint8_t *)base_mem + relocation_entry->r_offset);
+
+            uint64_t value = (uint64_t)((uint8_t *)base_mem + relocation_entry->r_addend);
+            
+            *where = value;
+        }
+        else{
+            // this is for binary blob ptr, need to implement
+            continue;
+        }
     }
 }
 
 
 bool dynamic_linker(){
-    return;
+    return true;
 }
 
 
 bool handle_dynamic_entries(int fd, loaderctx_s* loaderctx, void* base_mem, elf64programheader_s* prog_hdr_arr){
     // for now lets just read in the relavant ones we want, RELA, RELASZ, RELAENT
     // define rela_array[relasz/relaent]
+    bool end = false;
+    Elf64_Dyn* dyn = malloc(sizeof(Elf64_Dyn));
+
     while(1){
-        Elf64_Dyn* dyn = malloc(sizeof(Elf64_Dyn));
+        if(true == end){
+            break;
+        }
         size_t bytes_read = pread(fd, dyn, sizeof(Elf64_Dyn), (off_t)loaderctx->dyn_offset);
 
         switch (dyn->d_tag)
         {
         // end of array of dyns
         case DT_NULL:
-            return;
+            end = true;
+            break;
 
         case DT_RELA:
             loaderctx->rela_offset = dyn->d_un.d_ptr;
@@ -142,6 +167,8 @@ bool handle_dynamic_entries(int fd, loaderctx_s* loaderctx, void* base_mem, elf6
     if(!dynamic_linker()){
         return false;
     }
+
+    return true;
 }
 
 
@@ -157,7 +184,12 @@ void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t 
     else if (child_pid == 0){
         loaderctx_s* loaderctx = get_loader_info(prog_hdr_arr, num_entries);
         printf("Total size: %ld\n", loaderctx->load_size);
+        elfdata_s* data = (elfdata_s *)malloc(sizeof(elfdata_s));
+        data->type = ELF_FILE_DESCRIPTOR;
+        data->edata.e_fd = fd;
+        loaderctx->data = data;
 
+        // virtual mem ptr in the forked process = base address 
         void* mmap_mem = mmap_target_process(loaderctx->load_size);
 
         load_ptload_segments(fd, mmap_mem, prog_hdr_arr, num_entries, loaderctx);
@@ -219,7 +251,7 @@ bool elf_check_support(elf64header_s* elf_hdr){
         printf("Unsupported ELF file version.\n");
         return false;
     }
-    if(elf_hdr->e_type != ET_REL && elf_hdr->e_type != ET_EXEC){
+    if(elf_hdr->e_type != ET_REL && elf_hdr->e_type != ET_EXEC  && elf_hdr->e_type != ET_DYN){
         printf("Unsupported ELF file type.\n");
         return false;
     }
