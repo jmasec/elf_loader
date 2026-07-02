@@ -53,7 +53,21 @@ void _start(void) {
     const char msg[] = "PIE loader test OK\n";
     sys_write(1, msg, sizeof(msg) - 1);
 
+    if (p != &x)
+        sys_exit(100);
+
+    if (x != 42)
+        sys_exit(101);
+
+    if (counter != 8)
+        sys_exit(102);
+
+    if (accumulator != 25)
+        sys_exit(103);
+
+    sys_exit(0);
+
     // exit code reflects memory correctness
     // expected: counter = 8, accumulator = 25
-    sys_exit(accumulator);
+    // sys_exit(accumulator);
 }

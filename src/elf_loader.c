@@ -98,6 +98,8 @@ bool resolve_relocations( loaderctx_s* loaderctx,elf64programheader_s* prog_hdr_
     // loop for the total size of relas, an increment size of a rela
     for(size_t i = 0; i < loaderctx->relasz; i+=loaderctx->relaent){
         if(loaderctx->data->type == ELF_FILE_DESCRIPTOR){
+            // TODO: need to add relocation types switch here, maybe a function for this so I dont have 
+            // two switches for fd and blob
             // pread the relocation entry into the rela struct
             size_t bytes_read = pread(loaderctx->data->edata.e_fd, relocation_entry, loaderctx->relasz, loaderctx->rela_offset + i);
 
@@ -113,6 +115,7 @@ bool resolve_relocations( loaderctx_s* loaderctx,elf64programheader_s* prog_hdr_
             continue;
         }
     }
+    return true;
 }
 
 
@@ -172,16 +175,46 @@ bool handle_dynamic_entries(int fd, loaderctx_s* loaderctx, void* base_mem, elf6
 }
 
 
-void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, uintptr_t entry_offset){
-    pid_t child_pid; 
+void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, uintptr_t entry_offset, bool new_process){
+    
+    if(new_process){
+        pid_t child_pid; 
 
-    child_pid = fork();
+        child_pid = fork();
 
-    if(child_pid < 0){
-        perror("Fork Failed");
-        exit(1);
+        if(child_pid < 0){
+            perror("Fork Failed");
+            exit(1);
+        }
+        else if (child_pid == 0){
+            loaderctx_s* loaderctx = get_loader_info(prog_hdr_arr, num_entries);
+            printf("Total size: %ld\n", loaderctx->load_size);
+            elfdata_s* data = (elfdata_s *)malloc(sizeof(elfdata_s));
+            data->type = ELF_FILE_DESCRIPTOR;
+            data->edata.e_fd = fd;
+            loaderctx->data = data;
+
+            // virtual mem ptr in the forked process = base address 
+            void* mmap_mem = mmap_target_process(loaderctx->load_size);
+
+            load_ptload_segments(fd, mmap_mem, prog_hdr_arr, num_entries, loaderctx);
+
+            if(!handle_dynamic_entries(fd, loaderctx, mmap_mem, prog_hdr_arr)){
+                printf("Dynamic/Relocations Failed\n");
+                return;
+            }
+
+
+            void (*entry)(void);
+
+            entry = (void(*)(void))((char *)mmap_mem + (entry_offset - loaderctx->min_vaddr));
+
+            free(loaderctx);
+
+            entry();
+        }
     }
-    else if (child_pid == 0){
+    else{
         loaderctx_s* loaderctx = get_loader_info(prog_hdr_arr, num_entries);
         printf("Total size: %ld\n", loaderctx->load_size);
         elfdata_s* data = (elfdata_s *)malloc(sizeof(elfdata_s));

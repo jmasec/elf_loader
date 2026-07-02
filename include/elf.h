@@ -94,6 +94,18 @@ enum elf_dyn_types{
     DT_SYMENT
 };
 
+enum elf_relocation_types_x86{
+    R_X86_64_RELATIVE,
+    R_X86_64_GLOB_DAT,
+    R_X86_64_JUMP_SLOT,
+    R_X86_64_64,
+    R_X86_64_COPY,
+    R_X86_64_DTPMOD64,
+    R_X86_64_DTPOFF64,
+    R_X86_64_TPOFF64,
+    R_X86_64_IRELATIVE
+};
+
 typedef uint16_t Elf64_Half;    // 2 bytes, unsigned
 typedef uint32_t Elf64_Word;    // 4 bytes, unsigned
 typedef int32_t Elf64_Sword;

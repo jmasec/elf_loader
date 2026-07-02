@@ -54,7 +54,17 @@ void main(void) {
     sys_write(1, msg, sizeof(msg) - 1);
     printf("Printf Print!");
 
-    // exit code reflects memory correctness
-    // expected: counter = 8, accumulator = 25
-    sys_exit(accumulator);
+    if (p != &x)
+        sys_exit(100);
+
+    if (x != 42)
+        sys_exit(101);
+
+    if (counter != 8)
+        sys_exit(102);
+
+    if (accumulator != 25)
+        sys_exit(103);
+
+    sys_exit(0);
 }

@@ -43,7 +43,7 @@ int main(){
         return -1;
     }
 
-    inject_target_process(fd, prog_hdr_arr, num_prog_entries, elf_hdr->e_entry);
+    inject_target_process(fd, prog_hdr_arr, num_prog_entries, elf_hdr->e_entry, 0);
 
     free(elf_hdr);
     close(fd);
