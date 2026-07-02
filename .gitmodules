@@ -1,0 +1,3 @@
+[submodule "elf_parser"]
+	path = elf_parser
+	url = git@github.com:jmasec/elf_parser.git
