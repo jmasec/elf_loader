@@ -6,6 +6,7 @@
 ## Improvments
 - [x] handle relocations
 - [X] use target process or our own process instead of child
+- [x] make the elf parser code a submodule, make all changes to it in that for that repo, the code is not owned by this one, I just need the functions
 - [ ] handle dynamic resolutions
     - [ ] delagate to existing dynamic linker
         - loader maps the program
@@ -16,7 +17,6 @@
     - [ ] implement dynamic linker
 - [ ] no binary file, use a byte array of code
 - [ ] improve the software design, too many params, better struct organization of related data, etc
-- [ ] make the elf parser code a submodule, make all changes to it in that for that repo, the code is not owned by this one, I just need the functions
 - [ ] add unit testing
 
 TODO

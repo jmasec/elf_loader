@@ -189,7 +189,7 @@ void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t 
         else if (child_pid == 0){
             loaderctx_s* loaderctx = get_loader_info(prog_hdr_arr, num_entries);
             printf("Total size: %ld\n", loaderctx->load_size);
-            elfdata_s* data = (elfdata_s *)malloc(sizeof(elfdata_s));
+            elfptr_s* data = (elfptr_s *)malloc(sizeof(elfptr_s));
             data->type = ELF_FILE_DESCRIPTOR;
             data->edata.e_fd = fd;
             loaderctx->data = data;
@@ -217,7 +217,7 @@ void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t 
     else{
         loaderctx_s* loaderctx = get_loader_info(prog_hdr_arr, num_entries);
         printf("Total size: %ld\n", loaderctx->load_size);
-        elfdata_s* data = (elfdata_s *)malloc(sizeof(elfdata_s));
+        elfptr_s* data = (elfptr_s *)malloc(sizeof(elfptr_s));
         data->type = ELF_FILE_DESCRIPTOR;
         data->edata.e_fd = fd;
         loaderctx->data = data;

@@ -205,18 +205,18 @@ typedef struct {
 
 // this is for future things, in memory vs from a file
 // right now I only support a file
-typedef enum elf_datatype_s{
+typedef enum elf_ptr_type_s{
     ELF_FILE_DESCRIPTOR,
     ELF_MEMORY_POINTER
-} elf_datatype_s;
+} elf_ptr_type_s;
 
-typedef struct elfdata_s{
-    elf_datatype_s type;
+typedef struct elfptr_s{
+    elf_ptr_type_s type;
     union {
    		int	    e_fd;
    		void*	e_ptr;
 	} edata;
-} elfdata_s;
+} elfptr_s;
 
 
 #endif

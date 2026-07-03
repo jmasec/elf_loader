@@ -20,7 +20,7 @@ typedef struct loaderctx_s{
     size_t relasz; 
     size_t relaent;
     size_t total_relocations;
-    elfdata_s* data; //ptr to either the blob or file
+    elfptr_s* data; //ptr to either the blob or file
 } loaderctx_s;
 
 void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, uintptr_t entry_offset, bool new_process);
