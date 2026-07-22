@@ -2,7 +2,7 @@
 #include "elf_parser.h"
 #include "payload.h"
 
-#define ELF_TYPE 1
+#define ELF_TYPE 0
 #define ELF_PATH "test_reloc_write"
 
 int main(){

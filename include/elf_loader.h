@@ -30,7 +30,7 @@ enum which_process{
 };
 
 // void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, uintptr_t entry_offset, bool new_process);
-void inject_target_process(elfinternal_s* elf_internal, bool new_process);
+void inject_target_process(elfinternal_s* elf_internal, enum which_process w_proc);
 bool elf_check_support(elf64header_s* elf_hdr);
 
 #endif

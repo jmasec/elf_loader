@@ -46,34 +46,51 @@ void* mmap_target_process(size_t total_size){
 }
 
 
-void load_segment_to_memory(int fd, void* base_mem, elf64programheader_s prog_hdr, loaderctx_s* loaderctx){
-    off_t mem_offset = prog_hdr.p_offset;
-    size_t bss_size = prog_hdr.p_memsz - prog_hdr.p_filesz;
-    uintptr_t vaddr = (void *)(prog_hdr.p_vaddr);
+void load_segment_to_memory(void* base_mem, elfinternal_s* elf_internal, loaderctx_s* loaderctx, size_t index){
+    elf64programheader_s pgm_hdr = elf_internal->pgm_hdrs[index];
+
+    off_t mem_offset = pgm_hdr.p_offset;
+    size_t bss_size = pgm_hdr.p_memsz - pgm_hdr.p_filesz;
+    uintptr_t vaddr = (void *)(pgm_hdr.p_vaddr);
 
     int prot = 0;
-    if(prog_hdr.p_flags & PF_R) prot |= PROT_READ;
-    if(prog_hdr.p_flags & PF_W) prot |= PROT_WRITE;
-    if(prog_hdr.p_flags & PF_X) prot |= PROT_EXEC;
+    if(pgm_hdr.p_flags & PF_R) prot |= PROT_READ;
+    if(pgm_hdr.p_flags & PF_W) prot |= PROT_WRITE;
+    if(pgm_hdr.p_flags & PF_X) prot |= PROT_EXEC;
 
-    size_t bytes_read = pread(fd, (char *)base_mem + (vaddr - loaderctx->min_vaddr), prog_hdr.p_filesz, mem_offset);
+    if(elf_internal->elf_ptr->type == ELF_FILE_DESCRIPTOR){
+        ssize_t bytes_read = pread(elf_internal->elf_ptr->edata.e_fd, (char *)base_mem + (vaddr - loaderctx->min_vaddr), pgm_hdr.p_filesz, mem_offset);
+
+        if(bytes_read < 0){
+        printf("Error while loading PT_LOAD segment");
+        }
+    }
+    else if(elf_internal->elf_ptr->type == ELF_MEMORY_POINTER){
+        memcpy((char *)base_mem + (vaddr - loaderctx->min_vaddr), (elf_internal->elf_ptr->edata.e_ptr + mem_offset), pgm_hdr.p_filesz);
+    }
 
     if(bss_size > 0){
-        memset(((char *)base_mem + (vaddr - loaderctx->min_vaddr) + prog_hdr.p_filesz), 0, bss_size);
+        memset(((char *)base_mem + (vaddr - loaderctx->min_vaddr) + pgm_hdr.p_filesz), 0, bss_size);
     }
 
-    if(bytes_read < 0){
-        printf("Error while loading PT_LOAD segment");
-    }
-
-    mprotect((char *)base_mem + (vaddr - loaderctx->min_vaddr), (prog_hdr.p_filesz + bss_size), prot);
+    mprotect((char *)base_mem + (vaddr - loaderctx->min_vaddr), (pgm_hdr.p_filesz + bss_size), prot);
 }
 
+void load_ptload_segments(void* base_mem, elfinternal_s* elf_internal, loaderctx_s* loaderctx){
+// void load_ptload_segments(int fd, void* base_mem, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, loaderctx_s* loaderctx){
+    if(elf_internal->elf_ptr->type == ELF_FILE_DESCRIPTOR){
+        for(int i = 0; i < elf_internal->elf_hdr->e_phnum; i++){
+            if(elf_internal->pgm_hdrs[i].p_type == PT_LOAD){
+                load_segment_to_memory(base_mem, elf_internal, loaderctx, i);
+            }
+        }
+    }
 
-void load_ptload_segments(int fd, void* base_mem, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, loaderctx_s* loaderctx){
-    for(int i = 0; i < num_entries; i++){
-        if(prog_hdr_arr[i].p_type == PT_LOAD){
-            load_segment_to_memory(fd, base_mem, prog_hdr_arr[i], loaderctx);
+    else if((elf_internal->elf_ptr->type == ELF_MEMORY_POINTER)){
+        for(int i = 0; i < elf_internal->elf_hdr->e_phnum; i++){
+            if(elf_internal->pgm_hdrs[i].p_type == PT_LOAD){
+                load_segment_to_memory(base_mem, elf_internal, loaderctx, i);
+            }
         }
     }
 }
@@ -82,9 +99,9 @@ bool vaddr_to_offset(){
     return true;
 }
 
-bool resolve_relocations( loaderctx_s* loaderctx,elf64programheader_s* prog_hdr_arr, void* base_mem){
+bool resolve_relocations( loaderctx_s* loaderctx,elfinternal_s* elf_internal, void* base_mem){
     // vaddr_to_offset doesnt do anything right now
-    if(!vaddr_to_offset(loaderctx->rela_offset, prog_hdr_arr)){
+    if(!vaddr_to_offset(loaderctx->rela_offset, elf_internal->pgm_hdrs)){
         printf("Failed to Translate Virtual Mem to Offset");
         return false;
     }
@@ -95,74 +112,121 @@ bool resolve_relocations( loaderctx_s* loaderctx,elf64programheader_s* prog_hdr_
     Elf64_Rela* relocation_entry = (Elf64_Rela*)malloc(sizeof(Elf64_Rela));
 
     // loop for the total size of relas, an increment size of a rela
-    for(size_t i = 0; i < loaderctx->relasz; i+=loaderctx->relaent){
-        if(loaderctx->elfptr_s->type == ELF_FILE_DESCRIPTOR){
+    if(elf_internal->elf_ptr->type == ELF_FILE_DESCRIPTOR){
+        for(size_t i = 0; i < loaderctx->relasz; i+=loaderctx->relaent){
+
             // TODO: need to add relocation types switch here, maybe a function for this so I dont have 
             // two switches for fd and blob
             // pread the relocation entry into the rela struct
-            size_t bytes_read = pread(loaderctx->elfptr_s->edata.e_fd, relocation_entry, loaderctx->relasz, loaderctx->rela_offset + i);
+            ssize_t bytes_read = pread(elf_internal->elf_ptr->edata.e_fd, relocation_entry, sizeof(*relocation_entry), loaderctx->rela_offset + i);
 
             // then set *(base_mem + r_offset) = base_mem + r_addend;
-            uint64_t *where = (uint64_t *)((uint8_t *)base_mem + relocation_entry->r_offset);
+            uint64_t *where = (uint64_t *)((uint8_t *)base_mem + (relocation_entry->r_offset - loaderctx->min_vaddr));
 
             uint64_t value = (uint64_t)((uint8_t *)base_mem + relocation_entry->r_addend);
             
             *where = value;
         }
-        else{
-            // this is for binary blob ptr, need to implement
-            continue;
+
+    }
+    else if((elf_internal->elf_ptr->type == ELF_MEMORY_POINTER)){
+        for(size_t i = 0; i < loaderctx->relasz; i+=loaderctx->relaent){
+
+            memcpy(relocation_entry, (elf_internal->elf_ptr->edata.e_ptr + loaderctx->rela_offset + i), sizeof(*relocation_entry));
+
+            // then set *(base_mem + r_offset) = base_mem + r_addend;
+            uint64_t *where = (uint64_t *)((uint8_t *)base_mem + (relocation_entry->r_offset - loaderctx->min_vaddr));
+
+            uint64_t value = (uint64_t)((uint8_t *)base_mem + relocation_entry->r_addend);
+            
+            *where = value;
         }
     }
+
     return true;
 }
 
-
+// TODO Implement a dynamic linker for fun, low priority for now
 bool dynamic_linker(){
     return true;
 }
 
 
-bool handle_dynamic_entries(int fd, loaderctx_s* loaderctx, void* base_mem, elf64programheader_s* prog_hdr_arr){
-    // for now lets just read in the relavant ones we want, RELA, RELASZ, RELAENT
-    // define rela_array[relasz/relaent]
+bool read_dynamic_entries(void* base_mem, elfinternal_s* elf_internal, loaderctx_s* loaderctx){
     bool end = false;
-    Elf64_Dyn* dyn = malloc(sizeof(Elf64_Dyn));
+    // Elf64_Dyn* dyn = malloc(sizeof(Elf64_Dyn));
+    Elf64_Dyn dyn; 
 
-    while(1){
-        if(true == end){
-            break;
-        }
-        size_t bytes_read = pread(fd, dyn, sizeof(Elf64_Dyn), (off_t)loaderctx->dyn_offset);
+    if(ELF_FILE_DESCRIPTOR == elf_internal->elf_ptr->type){
+        while(!end){
+            
+            ssize_t bytes_read = pread(elf_internal->elf_ptr->edata.e_fd, &dyn, sizeof(Elf64_Dyn), (off_t)loaderctx->dyn_offset);
+            if(bytes_read < 0){
+                return false;
+            }
 
-        switch (dyn->d_tag)
-        {
-        // end of array of dyns
-        case DT_NULL:
-            end = true;
-            break;
+            switch (dyn.d_tag)
+            {
+            // end of array of dyns
+            case DT_NULL:
+                end = true;
+                break;
 
-        case DT_RELA:
-            loaderctx->rela_offset = dyn->d_un.d_ptr;
-            break;
+            case DT_RELA:
+                loaderctx->rela_offset = dyn.d_un.d_ptr;
+                break;
 
-        case DT_RELASZ:
-            loaderctx->relasz = dyn->d_un.d_val;   
-            break;
+            case DT_RELASZ:
+                loaderctx->relasz = dyn.d_un.d_val;   
+                break;
 
-        case DT_RELAENT:
-            loaderctx->relaent = dyn->d_un.d_val;
-            break;
+            case DT_RELAENT:
+                loaderctx->relaent = dyn.d_un.d_val;
+                break;
 
-        default:
-            // might not even need to read in the dyns at all, just free the dyns after each look adn not store them in a data struct
-            break;
-        }
+            default:
+                // might not even need to read in the dyns at all, just free the dyns after each look adn not store them in a data struct
+                break;
+            }
 
-        loaderctx->dyn_offset += sizeof(Elf64_Dyn);
+            loaderctx->dyn_offset += sizeof(Elf64_Dyn);
+            }
+    }
+    else if(ELF_MEMORY_POINTER == elf_internal->elf_ptr->type){
+        while(!end){
+            
+            //size_t bytes_read = pread(elf_internal->elf_ptr->edata.e_fd, &dyn, sizeof(Elf64_Dyn), (off_t)loaderctx->dyn_offset);
+            memcpy(&dyn, (elf_internal->elf_ptr->edata.e_ptr + loaderctx->dyn_offset), sizeof(Elf64_Dyn));
+
+            switch (dyn.d_tag)
+            {
+            // end of array of dyns
+            case DT_NULL:
+                end = true;
+                break;
+
+            case DT_RELA:
+                loaderctx->rela_offset = dyn.d_un.d_ptr;
+                break;
+
+            case DT_RELASZ:
+                loaderctx->relasz = dyn.d_un.d_val;   
+                break;
+
+            case DT_RELAENT:
+                loaderctx->relaent = dyn.d_un.d_val;
+                break;
+
+            default:
+                // might not even need to read in the dyns at all, just free the dyns after each look adn not store them in a data struct
+                break;
+            }
+
+            loaderctx->dyn_offset += sizeof(Elf64_Dyn);
+            }
     }
 
-    if(!resolve_relocations(loaderctx, prog_hdr_arr, base_mem)){
+    if(!resolve_relocations(loaderctx, elf_internal, base_mem)){
         return false;
     }
 
@@ -173,69 +237,26 @@ bool handle_dynamic_entries(int fd, loaderctx_s* loaderctx, void* base_mem, elf6
     return true;
 }
 
+void load_into_new_process(elfinternal_s* elf_internal){
+    pid_t child_pid; 
 
-// void inject_target_process(int fd, elf64programheader_s* prog_hdr_arr, uint16_t num_entries, uintptr_t entry_offset, bool new_process){
-void inject_target_process(elfinternal_s* elf_internal, bool w_proc){
-    // no remote process yet
-    switch (w_proc)
-    {
-    case NEW_PROCESS: {
-        load_into_new_process();
-        break;
+    child_pid = fork();
+
+    if(child_pid < 0){
+        perror("Fork Failed");
+        exit(1);
     }
-    case SAME_PROCESS: {
-        load_into_current_process();
-        break;
-    }
-    default:
-        printf("Not Supported Target Process Option");
-        break;
-    }
-
-    
-    if(w_proc == NEW_PROCESS){
-        pid_t child_pid; 
-
-        child_pid = fork();
-
-        if(child_pid < 0){
-            perror("Fork Failed");
-            exit(1);
-        }
-        else if (child_pid == 0){
-            loaderctx_s* loaderctx = get_loader_info(elf_internal->pgm_hdrs, elf_internal->elf_hdr->e_phnum);
-            printf("Total size: %ld\n", loaderctx->load_size);
-
-            // virtual mem ptr in the forked process = base address 
-            void* mmap_mem = mmap_target_process(loaderctx->load_size);
-
-            load_ptload_segments(fd, mmap_mem, elf_internal->pgm_hdrs, elf_internal->elf_hdr->e_phnum, loaderctx);
-
-            if(!handle_dynamic_entries(fd, loaderctx, mmap_mem, elf_internal->pgm_hdrs)){
-                printf("Dynamic/Relocations Failed\n");
-                return;
-            }
-
-
-            void (*entry)(void);
-
-            entry = (void(*)(void))((char *)mmap_mem + (elf_internal->elf_hdr->e_entry - loaderctx->min_vaddr));
-
-            free(loaderctx);
-
-            entry();
-        }
-    }
-    if(w_proc == SAME_PROCESS){
+    else if (child_pid == 0){
         loaderctx_s* loaderctx = get_loader_info(elf_internal->pgm_hdrs, elf_internal->elf_hdr->e_phnum);
         printf("Total size: %ld\n", loaderctx->load_size);
 
         // virtual mem ptr in the forked process = base address 
         void* mmap_mem = mmap_target_process(loaderctx->load_size);
 
-        load_ptload_segments(fd, mmap_mem, elf_internal->pgm_hdrs, elf_internal->elf_hdr->e_phnum, loaderctx);
+        // load_ptload_segments(elf_internal->elf_ptr, mmap_mem, elf_internal->pgm_hdrs, elf_internal->elf_hdr->e_phnum, loaderctx);
+        load_ptload_segments(mmap_mem, elf_internal, loaderctx);
 
-        if(!handle_dynamic_entries(fd, loaderctx, mmap_mem, elf_internal->pgm_hdrs)){
+        if(!read_dynamic_entries(mmap_mem, elf_internal, loaderctx)){
             printf("Dynamic/Relocations Failed\n");
             return;
         }
@@ -248,6 +269,53 @@ void inject_target_process(elfinternal_s* elf_internal, bool w_proc){
         free(loaderctx);
 
         entry();
+    }
+}
+
+void load_into_current_process(elfinternal_s* elf_internal){
+    loaderctx_s* loaderctx = get_loader_info(elf_internal->pgm_hdrs, elf_internal->elf_hdr->e_phnum);
+    printf("Total size: %ld\n", loaderctx->load_size);
+
+    // virtual mem ptr in the forked process = base address 
+    void* mmap_mem = mmap_target_process(loaderctx->load_size);
+
+    // load_ptload_segments(elf_internal->elf_ptr->edata.e_fd, mmap_mem, elf_internal->pgm_hdrs, elf_internal->elf_hdr->e_phnum, loaderctx);
+    load_ptload_segments(mmap_mem, elf_internal, loaderctx);
+
+    if(!read_dynamic_entries(mmap_mem, elf_internal, loaderctx)){
+        printf("Dynamic/Relocations Failed\n");
+        return;
+    }
+
+
+    void (*entry)(void);
+
+    entry = (void(*)(void))((char *)mmap_mem + (elf_internal->elf_hdr->e_entry - loaderctx->min_vaddr));
+
+    free(loaderctx);
+
+    entry();
+}
+
+
+void inject_target_process(elfinternal_s* elf_internal, enum which_process w_proc){
+    // no remote process yet
+    switch (w_proc)
+    {
+    case NEW_PROCESS: {
+        load_into_new_process(elf_internal);
+        break;
+    }
+    case SAME_PROCESS: {
+        load_into_current_process(elf_internal);
+        break;
+    }
+    case REMOTE_PROCESS: {
+        break;
+    }
+    default:
+        printf("Not Supported Target Process Option");
+        break;
     }
 }
 
