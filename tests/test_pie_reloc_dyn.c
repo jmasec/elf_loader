@@ -52,7 +52,7 @@ void main(void) {
     // visible proof of execution
     const char msg[] = "PIE loader test OK\n";
     sys_write(1, msg, sizeof(msg) - 1);
-    printf("Printf Print!");
+    printf("Printf Print!\n");
 
     if (p != &x)
         sys_exit(100);

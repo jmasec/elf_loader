@@ -1,5 +1,4 @@
 #include "elf_loader.h"
-#include <string.h>
 
 
 int page_align_up(int addr, int boundary){
@@ -146,6 +145,35 @@ bool resolve_relocations( loaderctx_s* loaderctx,elfinternal_s* elf_internal, vo
     return true;
 }
 
+/*
+TODO need to return the file path I want, so append to DEFAULT_... when I find it
+Find the shared object on the system
+Default checks:
+    1. /lib
+    2. /usr/lib
+    3. DT_RUNPATH
+*/
+bool find_shared_object(const char* so_name){
+    DIR *dir = opendir(DEFAULT_SO_PATH1);
+    struct dirent *entry;
+
+    if(NULL == dir){
+        perror("Unable to open directory");
+        return false;
+    }
+
+    while((entry = readdir(dir)) != NULL){
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        if (strstr(entry->d_name, so_name) != NULL) {
+            printf("[Found] %s\n", entry->d_name);
+        }
+    }
+
+    return true;
+}
+
 // TODO Implement a dynamic linker for fun, low priority for now
 bool dynamic_linker(){
     return true;
@@ -183,14 +211,35 @@ bool read_dynamic_entries(void* base_mem, elfinternal_s* elf_internal, loaderctx
             case DT_RELAENT:
                 loaderctx->relaent = dyn.d_un.d_val;
                 break;
+            // gives offset into string table
+            case DT_NEEDED:
+                loaderctx->dyn_str = dyn.d_un.d_val;
+                break;
+            // offset to string table within the ELF
+            case DT_STRTAB:
+                loaderctx->strtable_offset = dyn.d_un.d_ptr;
+                break;
+            // size of that string table
+            case DT_STRSZ:
+                loaderctx->strtable_size = dyn.d_un.d_val;
+                break;
 
             default:
-                // might not even need to read in the dyns at all, just free the dyns after each look adn not store them in a data struct
                 break;
             }
 
             loaderctx->dyn_offset += sizeof(Elf64_Dyn);
-            }
+        }
+
+        char * strtable = malloc(loaderctx->strtable_size);
+
+        // read in the string table so we can just get string access without needing to pread all the time
+        ssize_t bytes_read = pread(elf_internal->elf_ptr->edata.e_fd, strtable, loaderctx->strtable_size, loaderctx->strtable_offset);
+        if(bytes_read < 0){
+            return false;
+        }
+        // pointer to the whole read in block of the string table
+        loaderctx->strtable = strtable;
     }
     else if(ELF_MEMORY_POINTER == elf_internal->elf_ptr->type){
         while(!end){
@@ -223,10 +272,15 @@ bool read_dynamic_entries(void* base_mem, elfinternal_s* elf_internal, loaderctx
             }
 
             loaderctx->dyn_offset += sizeof(Elf64_Dyn);
-            }
+        }
     }
 
     if(!resolve_relocations(loaderctx, elf_internal, base_mem)){
+        return false;
+    }
+
+    // strtable buffer and then offsetted into that should be the shared object file name
+    if(!find_shared_object(loaderctx->strtable+loaderctx->strtable_offset)){
         return false;
     }
 

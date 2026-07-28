@@ -6,8 +6,14 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include <dirent.h>
+#include <string.h>
 #include "elf.h"
 #include "elf_parser.h"
+
+#define DEFAULT_SO_PATH1 "/lib"
+#define DEFAULT_SO_PATH2 "/usr/lib"
 
 // add dynamic symbol things here as well
 // could have elfdata struct in here as well
@@ -18,12 +24,13 @@ typedef struct loaderctx_s{
     size_t load_size;
     Elf64_Off dyn_offset;
     Elf64_Off rela_offset;
-    Elf64_Off dynstr_offset;
     Elf64_Off strtable_offset;
-    size_t strtable_size; 
+    Elf64_Off dyn_str;
+    size_t strtable_size; // to check that valid offsets into string table
     size_t relasz; 
     size_t relaent;
     size_t total_relocations;
+    char* strtable;
 } loaderctx_s;
 
 

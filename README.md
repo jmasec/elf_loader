@@ -21,6 +21,8 @@
     - .init_array
     - malformed-input and unsupported-feature handling
 - [ ] improve the software design, too many params, better struct organization of related data, etc (continuous)
+    - I might start preading in blocks of the ELF, and then using those pointers, this might make it easier to deal with memory pointers and file descriptors since they would essentially both be mem ptrs at that point
+    - make sure everything malloced is cleaned up
 
 ## Future
 - Obfuscated ELF bytes
