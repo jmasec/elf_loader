@@ -11,16 +11,21 @@
 
 // add dynamic symbol things here as well
 // could have elfdata struct in here as well
+// need to add strtab and strsz
 typedef struct loaderctx_s{
     Elf64_Addr max_vaddr;
     Elf64_Addr min_vaddr;
     size_t load_size;
     Elf64_Off dyn_offset;
     Elf64_Off rela_offset;
+    Elf64_Off dynstr_offset;
+    Elf64_Off strtable_offset;
+    size_t strtable_size; 
     size_t relasz; 
     size_t relaent;
     size_t total_relocations;
 } loaderctx_s;
+
 
 
 enum which_process{

@@ -7,10 +7,19 @@
 - [x] handle relocations
 - [X] use target process or our own process instead of child
 - [x] make the elf parser code a submodule, make all changes to it in that for that repo, the code is not owned by this one, I just need the functions
-- [ ] no binary file, use a byte array of code.
+- [X] no binary file, use a byte array of code.
 - [X] update code to use elfinternel from the parser code
 - [ ] add unit testing, test cases for elf files
-- [ ] implement dynamic linker (larger task)
+- [ ] implement dynamic linker (larger task, first with ELF file)
+    - DT_NEEDED parsing
+    - dynamic symbol and string tables
+    - eager external symbol resolution
+    - R_X86_64_RELATIVE
+    - R_X86_64_GLOB_DAT
+    - R_X86_64_JUMP_SLOT
+    - R_X86_64_64
+    - .init_array
+    - malformed-input and unsupported-feature handling
 - [ ] improve the software design, too many params, better struct organization of related data, etc (continuous)
 
 ## Future
